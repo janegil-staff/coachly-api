@@ -1,0 +1,25 @@
+{
+  "name": "coachly-api",
+  "version": "1.0.0",
+  "description": "Share training data with your coach",
+  "keywords": [
+    "coaching",
+    "training",
+    "sharing"
+  ],
+  "homepage": "https://github.com/janegil-staff/coachly-api#readme",
+  "bugs": {
+    "url": "https://github.com/janegil-staff/coachly-api/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/janegil-staff/coachly-api.git"
+  },
+  "license": "ISC",
+  "author": "Jan Egil Staff Ovretveit",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
