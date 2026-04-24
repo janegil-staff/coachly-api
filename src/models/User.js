@@ -19,11 +19,20 @@ const CoachProfileSchema = new Schema(
 const ClientProfileSchema = new Schema(
   {
     dob: { type: Date, default: null },
-    heightCm: { type: Number, default: null },
+    age: { type: Number, min: 0, max: 120, default: null },
+    gender: {
+      type: String,
+      enum: ["female", "male", "undefined", null],
+      default: null,
+    },
+    heightCm: { type: Number, min: 0, max: 300, default: null },
+    weightKg: { type: Number, min: 0, max: 500, default: null },
     // "build_muscle" | "lose_fat" | "general_fitness" | "endurance" | "strength"
     goalType: { type: String, default: "general_fitness" },
     // "sedentary" | "light" | "moderate" | "active" | "very_active"
     activityLevel: { type: String, default: "moderate" },
+    viewedAdvice: { type: [String], default: [] },
+    relevantAdvice: { type: [String], default: [] },
     isPro: { type: Boolean, default: false },
     proUntil: { type: Date, default: null },
   },

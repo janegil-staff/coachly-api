@@ -1,6 +1,4 @@
 // Maps a LogEntry to component scores (0-100 each) and a composite score.
-// Tunable weights — defaults skew toward wellbeing and sleep since they're
-// daily-logged reliably; workout and nutrition are "bonus" drivers.
 const WEIGHTS = {
   wellbeing: 0.35,
   sleep: 0.25,
@@ -9,7 +7,6 @@ const WEIGHTS = {
 };
 
 function scale1to5(val) {
-  // 1→0, 5→100 (linear). null → null (unreported)
   if (val == null) return null;
   return Math.max(0, Math.min(100, ((val - 1) / 4) * 100));
 }
@@ -29,8 +26,7 @@ function computeWellbeingScore(entry) {
 function computeSleepScore(entry) {
   if (entry.sleepHours == null && entry.sleepQuality == null) return 0;
 
-  // Hours: peak at 7-9h, drop off both sides
-  let hoursScore = 0;
+  let hoursScore = null;
   if (entry.sleepHours != null) {
     const h = entry.sleepHours;
     if (h >= 7 && h <= 9) hoursScore = 100;
@@ -45,39 +41,51 @@ function computeSleepScore(entry) {
   const qualityScore = scale1to5(entry.sleepQuality);
 
   const parts = [hoursScore, qualityScore].filter((v) => v != null);
+  if (!parts.length) return 0;
   return parts.reduce((s, v) => s + v, 0) / parts.length;
 }
 
 function computeWorkoutScore(entry) {
-  if (!entry.didWorkout) {
-    // "rest" is a valid, healthy choice — not zero
-    return entry.workoutType === "rest" ? 60 : 0;
+  if (entry.isRestDay) {
+    // Rest is a healthy, valid choice — not zero
+    return 60;
   }
 
-  // Did workout: base 70, + intensity bonus, + duration bonus
+  const workouts = entry.workouts ?? [];
+  if (workouts.length === 0) return 0;
+
+  const totalDuration = workouts.reduce(
+    (sum, w) => sum + (w.durationMinutes || 0),
+    0,
+  );
+
+  // Base for logging any workout
   let score = 70;
-  if (entry.workoutIntensity != null) {
-    // Intensity 3 is ideal; 1 or 5 is sub-optimal
-    const ideal = 1 - Math.abs(entry.workoutIntensity - 3) / 3;
+
+  // Effort bonus (3 is ideal)
+  if (entry.effort != null) {
+    const ideal = 1 - Math.abs(entry.effort - 3) / 3;
     score += 15 * ideal;
   }
-  if (entry.workoutDurationMin != null) {
-    const dur = entry.workoutDurationMin;
-    if (dur >= 30 && dur <= 75) score += 15;
-    else if (dur >= 20) score += 10;
-    else if (dur >= 10) score += 5;
-  }
+
+  // Duration bonus
+  if (totalDuration >= 30 && totalDuration <= 90) score += 15;
+  else if (totalDuration >= 20) score += 10;
+  else if (totalDuration >= 10) score += 5;
+
+  // Variety bonus: multiple workout types in one day
+  const uniqueTypes = new Set(workouts.map((w) => w.type)).size;
+  if (uniqueTypes >= 2) score += 5;
+
   return Math.min(100, score);
 }
 
 function computeNutritionScore(entry) {
   const parts = [];
   if (entry.mealsOnPlan != null) {
-    // Assume target is ~3 on-plan meals; scale against that
     parts.push(Math.min(100, (entry.mealsOnPlan / 3) * 100));
   }
   if (entry.waterGlasses != null) {
-    // Target ~8 glasses
     parts.push(Math.min(100, (entry.waterGlasses / 8) * 100));
   }
   if (!parts.length) return 0;
