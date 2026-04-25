@@ -7,6 +7,8 @@ import { config } from "./config/env.js";
 import { connectDb, disconnectDb } from "./config/db.js";
 
 import authRoutes from "./routes/auth.js";
+import shareRoutes from "./routes/share.js";
+import questionnaireRoutes from "./routes/questionnaires.js";
 import inviteRoutes from "./routes/invite.js";
 import relationshipRoutes from "./routes/relationships.js";
 import logRoutes from "./routes/logs.js";
@@ -45,6 +47,8 @@ app.get("/health", (_req, res) => {
 
 // ── Routes ───────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
+app.use("/api/share", shareRoutes);
+app.use("/api/questionnaires", questionnaireRoutes);
 app.use("/api/invite", inviteRoutes);
 app.use("/api/relationships", relationshipRoutes);
 app.use("/api/logs", logRoutes);
