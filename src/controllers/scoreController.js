@@ -118,7 +118,12 @@ function nutrition(log) {
 }
 
 /** Compute composite score from component scores. */
-function composite({ wellbeingScore, sleepScore, workoutScore, nutritionScore }) {
+function composite({
+  wellbeingScore,
+  sleepScore,
+  workoutScore,
+  nutritionScore,
+}) {
   const weighted =
     wellbeingScore * 0.3 +
     sleepScore * 0.25 +
@@ -255,11 +260,6 @@ export async function recomputeAll(req, res, next) {
   }
 }
 
-/**
- * GET /api/scores?from=YYYY-MM-DD&to=YYYY-MM-DD
- *
- * Returns the authenticated client's daily scores within an optional date range.
- */
 export async function getScores(req, res, next) {
   try {
     const clientId = req.user._id;
@@ -273,12 +273,11 @@ export async function getScores(req, res, next) {
     }
 
     const scores = await DailyScore.find(filter).sort({ date: 1 }).lean();
-    res.json({ success: true, data: scores });
+    res.json({ scores });
   } catch (err) {
     next(err);
   }
 }
-
 /**
  * GET /api/scores/today
  *
