@@ -58,7 +58,7 @@ export async function fetchShareReport(req, res) {
   );
   if (!user) throw new NotFoundError("User not found");
 
-  // Last 30 days of logs
+  // Last 90 days of logs
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 90);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
@@ -106,15 +106,25 @@ export async function fetchShareReport(req, res) {
     avgEffort: avg(nonRest, "effort"),
     avgMood: avg(logs, "mood"),
     avgEnergy: avg(logs, "energy"),
-    avgSleep: avg(logs, "sleep"),
+    avgSleep: avg(logs, "sleepQuality"),
     avgSoreness: avg(logs, "soreness"),
     topWorkoutType: topType,
     totalWorkouts: logs.reduce((s, l) => s + (l.workouts?.length || 0), 0),
-    totalMinutes: logs.reduce(
-      (s, l) =>
-        s + (l.workouts?.reduce((a, w) => a + (w.durationMinutes || 0), 0) || 0),
-      0
-    ),
+    totalMinutes: logs.reduce((s, l) => {
+      // // shareController bugfixes v1
+      // Prefer categoryDurations (current mobile shape); fall back to legacy
+      // per-workout durations for old logs.
+      const fromCats = (l.categoryDurations || []).reduce(
+        (a, c) => a + (c.durationMinutes || 0),
+        0
+      );
+      if (fromCats > 0) return s + fromCats;
+      const fromWorkouts = (l.workouts || []).reduce(
+        (a, w) => a + (w.durationMinutes || 0),
+        0
+      );
+      return s + fromWorkouts;
+    }, 0),
     windowStart: cutoffStr,
     windowEnd: new Date().toISOString().slice(0, 10),
   };

@@ -6,14 +6,18 @@ import * as ctrl from "../controllers/authController.js";
 const router = express.Router();
 
 router.post("/check-email", asyncHandler(ctrl.checkEmail));
-router.post("/signup",      asyncHandler(ctrl.signup));
-router.post("/login",       asyncHandler(ctrl.login));
-router.post("/refresh",     asyncHandler(ctrl.refresh));
-router.post("/logout",      requireAuth, asyncHandler(ctrl.logout));
-router.get(   "/me",        requireAuth, asyncHandler(ctrl.getMe));
-router.patch( "/me",        requireAuth, asyncHandler(ctrl.updateMe));
-router.patch( "/change-email",    requireAuth, asyncHandler(ctrl.changeEmail));
-router.patch( "/change-password", requireAuth, asyncHandler(ctrl.changePassword));
-router.delete("/me",        requireAuth, asyncHandler(ctrl.deleteMe));
+router.post("/signup", asyncHandler(ctrl.signup));
+router.post("/login", asyncHandler(ctrl.login));
+router.post("/refresh", asyncHandler(ctrl.refresh));
+router.post("/logout", requireAuth, asyncHandler(ctrl.logout));
+router.get("/me", requireAuth, asyncHandler(ctrl.getMe));
+router.patch("/me", requireAuth, asyncHandler(ctrl.updateMe));
+router.patch("/change-email", requireAuth, asyncHandler(ctrl.changeEmail));
+router.patch(
+  "/change-password",
+  requireAuth,
+  asyncHandler(ctrl.changePassword),
+);
+router.delete("/me", requireAuth, asyncHandler(ctrl.deleteMe));
 
 export default router;

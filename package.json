@@ -18,7 +18,7 @@
   "license": "ISC",
   "author": "Jan Egil Staff Ovretveit",
   "type": "module",
-  "main": "index.js",
+  "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",

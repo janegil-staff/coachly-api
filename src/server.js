@@ -16,6 +16,7 @@ import workoutRoutes from "./routes/workouts.js";
 import messageRoutes from "./routes/messages.js";
 import coachRoutes from "./routes/coach.js";
 import scoreRoutes from "./routes/scores.js";
+import exerciseRoutes from "./routes/exercises.js";
 
 const app = express();
 
@@ -56,6 +57,7 @@ app.use("/api/workouts", workoutRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/coach", coachRoutes);
 app.use("/api/scores", scoreRoutes);
+app.use("/api/exercises", exerciseRoutes);
 
 // ── 404 handler ──────────────────────────────────────────────────────────
 app.use((req, res) => {
