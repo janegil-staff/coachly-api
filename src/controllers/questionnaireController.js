@@ -26,15 +26,20 @@ export async function submitQuestionnaire(req, res) {
     "restq",
     "pss10",
     "psqi",
-    "ipaq"
+    "ipaq",
   ];
+
   if (!type || !ALLOWED_TYPES.includes(type)) {
     throw new BadRequestError(
       `type must be one of: ${ALLOWED_TYPES.join(", ")}`,
     );
   }
-  if (!Array.isArray(answers)) {
-    throw new BadRequestError("answers must be an array");
+  if (answers == null || typeof answers !== "object") {
+    throw new BadRequestError("answers must be an array or object");
+  }
+  // hooper and restq need arrays (server-side scoring); others accept objects
+  if ((type === "hooper" || type === "restq") && !Array.isArray(answers)) {
+    throw new BadRequestError(`${type} answers must be an array`);
   }
 
   let scores;

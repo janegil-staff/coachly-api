@@ -20,14 +20,15 @@ const QuestionnaireSchema = new mongoose.Schema(
         "restq",
         "pss10",
         "psqi",
-        "ipaq", // ← add
+        "ipaq",
       ],
       required: true,
+      index: true,
     },
     // Date of submission, YYYY-MM-DD
     date: { type: String, required: true, index: true },
     // Raw answers in item order. Hooper: 4 values (1-7). RESTQ: 36 values (0-6).
-    answers: { type: [Number], required: true },
+    answers: { type: mongoose.Schema.Types.Mixed, required: true },
     // Computed scores — shape varies by type
     scores: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
