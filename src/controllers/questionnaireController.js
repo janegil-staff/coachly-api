@@ -7,27 +7,64 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// POST /api/questionnaires { type, answers, date? }
+// POST /api/questionnaires { type, answers, date?, scores? }
 export async function submitQuestionnaire(req, res) {
+  console.log("======================================");
+  console.log("[DEBUG] submitQuestionnaire called");
+  console.log("[DEBUG] body keys:", Object.keys(req.body || {}));
+  console.log("[DEBUG] req.body.scores:", JSON.stringify(req.body?.scores));
+  console.log("[DEBUG] req.body.score:", JSON.stringify(req.body?.score));
+  console.log("======================================");
+
   const { type, answers, date } = req.body || {};
-  if (!type || (type !== "hooper" && type !== "restq")) {
-    throw new BadRequestError("type must be 'hooper' or 'restq'");
+  const ALLOWED_TYPES = [
+    "hooper",
+    "restq",
+    "goals",
+    "trainingReview",
+    "bodyInjury",
+    "burnoutRisk",
+  ];
+  if (!type || !ALLOWED_TYPES.includes(type)) {
+    throw new BadRequestError(
+      `type must be one of: ${ALLOWED_TYPES.join(", ")}`,
+    );
   }
   if (!Array.isArray(answers)) {
     throw new BadRequestError("answers must be an array");
   }
+
   let scores;
   try {
-    scores = type === "hooper" ? scoreHooper(answers) : scoreRestq(answers);
+    if (type === "hooper") {
+      scores = scoreHooper(answers);
+    } else if (type === "restq") {
+      scores = scoreRestq(answers);
+    } else {
+      // goals / trainingReview / bodyInjury / burnoutRisk:
+      // The mobile app computes the score and sends it in req.body.scores.
+      scores = req.body.scores ?? req.body.score ?? null;
+      console.log("[DEBUG] computed scores to store:", JSON.stringify(scores));
+    }
   } catch (e) {
     throw new BadRequestError(e.message);
   }
-  const dateStr = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : todayStr();
+
+  const dateStr =
+    typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? date
+      : todayStr();
+
+  console.log("[DEBUG] about to upsert with scores:", JSON.stringify(scores));
+
   const doc = await Questionnaire.findOneAndUpdate(
     { userId: req.user._id, type, date: dateStr },
     { userId: req.user._id, type, date: dateStr, answers, scores },
-    { new: true, upsert: true }
+    { new: true, upsert: true },
   );
+
+  console.log("[DEBUG] saved doc.scores:", JSON.stringify(doc.scores));
+
   res.json(doc);
 }
 
@@ -45,6 +82,8 @@ export async function listQuestionnaires(req, res) {
 export async function latestQuestionnaire(req, res) {
   const { type } = req.query || {};
   if (!type) throw new BadRequestError("type required");
-  const item = await Questionnaire.findOne({ userId: req.user._id, type }).sort({ date: -1 }).lean();
+  const item = await Questionnaire.findOne({ userId: req.user._id, type })
+    .sort({ date: -1 })
+    .lean();
   res.json(item || null);
 }
