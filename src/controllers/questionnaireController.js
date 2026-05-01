@@ -18,12 +18,15 @@ export async function submitQuestionnaire(req, res) {
 
   const { type, answers, date } = req.body || {};
   const ALLOWED_TYPES = [
-    "hooper",
-    "restq",
     "goals",
     "trainingReview",
     "bodyInjury",
     "burnoutRisk",
+    "hooper",
+    "restq",
+    "pss10",
+    "psqi",
+    "ipaq"
   ];
   if (!type || !ALLOWED_TYPES.includes(type)) {
     throw new BadRequestError(

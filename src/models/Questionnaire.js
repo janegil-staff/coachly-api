@@ -11,9 +11,18 @@ const QuestionnaireSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["hooper", "restq", "goals", "trainingReview", "bodyInjury", "burnoutRisk"],
+      enum: [
+        "goals",
+        "trainingReview",
+        "bodyInjury",
+        "burnoutRisk",
+        "hooper",
+        "restq",
+        "pss10",
+        "psqi",
+        "ipaq", // ← add
+      ],
       required: true,
-      index: true,
     },
     // Date of submission, YYYY-MM-DD
     date: { type: String, required: true, index: true },
@@ -22,7 +31,7 @@ const QuestionnaireSchema = new mongoose.Schema(
     // Computed scores — shape varies by type
     scores: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // One submission per user per type per day (upsert semantics)
