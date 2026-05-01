@@ -114,7 +114,6 @@ export async function fetchShareReport(req, res) {
     topWorkoutType: topType,
     totalWorkouts: logs.reduce((s, l) => s + (l.workouts?.length || 0), 0),
     totalMinutes: logs.reduce((s, l) => {
-      // // shareController bugfixes v1
       // Prefer categoryDurations (current mobile shape); fall back to legacy
       // per-workout durations for old logs.
       const fromCats = (l.categoryDurations || []).reduce(
@@ -132,8 +131,15 @@ export async function fetchShareReport(req, res) {
     windowEnd: new Date().toISOString().slice(0, 10),
   };
 
-  // Latest questionnaires (Hooper + RESTQ + Goals)
-  const [latestHooper, latestRestq, latestGoals] = await Promise.all([
+  // Latest questionnaires (Hooper + RESTQ + Goals + PSS-10 + PSQI + IPAQ)
+  const [
+    latestHooper,
+    latestRestq,
+    latestGoals,
+    latestPss10,
+    latestPsqi,
+    latestIpaq,
+  ] = await Promise.all([
     Questionnaire.findOne({ userId: entry.userId, type: "hooper" })
       .sort({ date: -1 })
       .lean(),
@@ -141,6 +147,15 @@ export async function fetchShareReport(req, res) {
       .sort({ date: -1 })
       .lean(),
     Questionnaire.findOne({ userId: entry.userId, type: "goals" })
+      .sort({ date: -1 })
+      .lean(),
+    Questionnaire.findOne({ userId: entry.userId, type: "pss10" })
+      .sort({ date: -1 })
+      .lean(),
+    Questionnaire.findOne({ userId: entry.userId, type: "psqi" })
+      .sort({ date: -1 })
+      .lean(),
+    Questionnaire.findOne({ userId: entry.userId, type: "ipaq" })
       .sort({ date: -1 })
       .lean(),
   ]);
@@ -160,6 +175,9 @@ export async function fetchShareReport(req, res) {
     latestHooper,
     latestRestq,
     latestGoals,
+    latestPss10,
+    latestPsqi,
+    latestIpaq,
   });
 }
 
