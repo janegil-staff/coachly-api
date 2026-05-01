@@ -27,7 +27,10 @@ export async function createShareCode(req, res) {
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     const candidate = randomDigits(6);
     const clash = await ShareCode.findOne({ code: candidate });
-    if (!clash) { code = candidate; break; }
+    if (!clash) {
+      code = candidate;
+      break;
+    }
   }
   if (!code) {
     throw new BadRequestError("Could not generate a unique share code");
@@ -54,7 +57,7 @@ export async function fetchShareReport(req, res) {
   }
 
   const user = await User.findById(entry.userId).select(
-    "email language clientProfile createdAt"
+    "email language clientProfile createdAt",
   );
   if (!user) throw new NotFoundError("User not found");
 
@@ -95,7 +98,7 @@ export async function fetchShareReport(req, res) {
   logs.forEach((l) =>
     (l.workouts || []).forEach((w) => {
       if (w?.type) typeCounts[w.type] = (typeCounts[w.type] || 0) + 1;
-    })
+    }),
   );
   const topType =
     Object.entries(typeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
@@ -116,12 +119,12 @@ export async function fetchShareReport(req, res) {
       // per-workout durations for old logs.
       const fromCats = (l.categoryDurations || []).reduce(
         (a, c) => a + (c.durationMinutes || 0),
-        0
+        0,
       );
       if (fromCats > 0) return s + fromCats;
       const fromWorkouts = (l.workouts || []).reduce(
         (a, w) => a + (w.durationMinutes || 0),
-        0
+        0,
       );
       return s + fromWorkouts;
     }, 0),
@@ -129,10 +132,17 @@ export async function fetchShareReport(req, res) {
     windowEnd: new Date().toISOString().slice(0, 10),
   };
 
-  // Latest questionnaires (Hooper + RESTQ)
-  const [latestHooper, latestRestq] = await Promise.all([
-    Questionnaire.findOne({ userId: entry.userId, type: "hooper" }).sort({ date: -1 }).lean(),
-    Questionnaire.findOne({ userId: entry.userId, type: "restq" }).sort({ date: -1 }).lean(),
+  // Latest questionnaires (Hooper + RESTQ + Goals)
+  const [latestHooper, latestRestq, latestGoals] = await Promise.all([
+    Questionnaire.findOne({ userId: entry.userId, type: "hooper" })
+      .sort({ date: -1 })
+      .lean(),
+    Questionnaire.findOne({ userId: entry.userId, type: "restq" })
+      .sort({ date: -1 })
+      .lean(),
+    Questionnaire.findOne({ userId: entry.userId, type: "goals" })
+      .sort({ date: -1 })
+      .lean(),
   ]);
 
   res.json({
@@ -149,6 +159,7 @@ export async function fetchShareReport(req, res) {
     scores,
     latestHooper,
     latestRestq,
+    latestGoals,
   });
 }
 
