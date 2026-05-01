@@ -11,7 +11,7 @@ const QuestionnaireSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["hooper", "restq"],
+      enum: ["hooper", "restq", "goals", "trainingReview", "bodyInjury", "burnoutRisk"],
       required: true,
       index: true,
     },
