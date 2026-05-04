@@ -1,13 +1,15 @@
 // src/controllers/authController.js
 //
-// Existing handlers unchanged; two new ones added at the bottom:
+// Production version. The verbose [forgotPassword] STEP N logs from the
+// diagnostic version are removed — kept only a single error log on email
+// send failure so we still get visibility if Resend ever rejects a send.
+//
+// Two new endpoints over the original file:
 //   - forgotPassword  (POST /auth/forgot-password)  generates code, emails it
 //   - resetPassword   (POST /auth/reset-password)   verifies code, updates password
-//
-// The mobile app calls these /forgot-pin and /reset-pin in the UI but the
-// underlying field is `passwordHash` — same as everywhere else.
 
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 import User from "../models/User.js";
 import {
@@ -339,7 +341,7 @@ export async function changePassword(req, res) {
   res.json({ user: user.toPublic(), accessToken, refreshToken });
 }
 
-// ── Forgot / reset password (new) ─────────────────────────────────────────
+// ── Forgot / reset password ───────────────────────────────────────────────
 
 const RESET_CODE_TTL_MS  = 15 * 60 * 1000; // 15 minutes
 const RESET_MAX_ATTEMPTS = 5;
@@ -356,18 +358,18 @@ function generateResetCode() {
  * POST /auth/forgot-password
  *
  * Always returns 200 regardless of whether the email exists in the database.
- * This prevents attackers from enumerating which emails are registered.
+ * Anti-enumeration: prevents attackers from probing which emails are
+ * registered by comparing response shapes.
  */
 export async function forgotPassword(req, res) {
   const email = normalizeEmail(req.body?.email);
   if (!isValidEmail(email)) {
-    // Even on bad email format, return generic 200 to avoid leaking info
     return res.json({ ok: true });
   }
 
   const user = await User.findOne({ email });
   if (!user) {
-    // Email isn't registered — silently succeed
+    // Email isn't registered — silently succeed so attackers can't tell.
     return res.json({ ok: true });
   }
 
@@ -380,8 +382,9 @@ export async function forgotPassword(req, res) {
   try {
     await sendPinResetEmail(user.email, code, user.language || "en");
   } catch (err) {
-    // Email failed — log it server-side, but still return 200 to client.
-    // We don't want to leak that the email exists OR that mail is broken.
+    // Resend (or the network) rejected the send. We log this server-side
+    // but still return 200 to the client — same response whether the email
+    // doesn't exist or the send failed, to keep anti-enumeration intact.
     console.error("[forgotPassword] sendPinResetEmail failed:", err?.message);
   }
 
@@ -422,7 +425,7 @@ export async function resetPassword(req, res) {
   }
 
   if (user.resetCodeExpiresAt.getTime() < Date.now()) {
-    // Expired — clear so a fresh code is required
+    // Expired — clear so a fresh code is required.
     user.resetCodeHash      = null;
     user.resetCodeExpiresAt = null;
     user.resetCodeAttempts  = 0;
@@ -431,7 +434,7 @@ export async function resetPassword(req, res) {
   }
 
   if (user.resetCodeAttempts >= RESET_MAX_ATTEMPTS) {
-    // Too many wrong tries — clear and force a new code
+    // Too many wrong tries — clear and force a new code.
     user.resetCodeHash      = null;
     user.resetCodeExpiresAt = null;
     user.resetCodeAttempts  = 0;
@@ -439,17 +442,14 @@ export async function resetPassword(req, res) {
     throw genericFail();
   }
 
-  const ok = await (await import("bcryptjs")).default.compare(
-    code,
-    user.resetCodeHash,
-  );
+  const ok = await bcrypt.compare(code, user.resetCodeHash);
   if (!ok) {
     user.resetCodeAttempts += 1;
     await user.save();
     throw genericFail();
   }
 
-  // Code is valid — update password, clear reset state, rotate refresh token
+  // Code is valid — update password, clear reset state, rotate refresh token.
   user.passwordHash       = await User.hashPassword(newPassword);
   user.resetCodeHash      = null;
   user.resetCodeExpiresAt = null;
