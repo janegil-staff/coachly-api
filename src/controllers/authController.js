@@ -1,3 +1,14 @@
+// src/controllers/authController.js
+//
+// Existing handlers unchanged; two new ones added at the bottom:
+//   - forgotPassword  (POST /auth/forgot-password)  generates code, emails it
+//   - resetPassword   (POST /auth/reset-password)   verifies code, updates password
+//
+// The mobile app calls these /forgot-pin and /reset-pin in the UI but the
+// underlying field is `passwordHash` — same as everywhere else.
+
+import crypto from "crypto";
+
 import User from "../models/User.js";
 import {
   signAccessToken,
@@ -12,6 +23,9 @@ import {
   UnauthorizedError,
 } from "../utils/errors.js";
 import { isValidEmail, normalizeEmail } from "../utils/validation.js";
+import { sendPinResetEmail } from "../services/emailService.js";
+
+// ── Existing handlers (unchanged) ─────────────────────────────────────────
 
 export async function checkEmail(req, res) {
   const email = normalizeEmail(req.body?.email);
@@ -161,13 +175,22 @@ export async function updateMe(req, res) {
     throw new BadRequestError("Only clients have a body profile");
   }
 
-  const { gender, age, heightCm, weightKg, language, viewedAdvice, relevantAdvice } = req.body || {};
+  const {
+    gender,
+    age,
+    heightCm,
+    weightKg,
+    language,
+    viewedAdvice,
+    relevantAdvice,
+  } = req.body || {};
 
-  // Validate clientProfile fields
   const profileUpdates = {};
   if (gender !== undefined) {
     if (!["female", "male", "undefined", null].includes(gender)) {
-      throw new BadRequestError("gender must be 'female', 'male', 'undefined', or null");
+      throw new BadRequestError(
+        "gender must be 'female', 'male', 'undefined', or null",
+      );
     }
     profileUpdates.gender = gender;
   }
@@ -184,20 +207,30 @@ export async function updateMe(req, res) {
     if (heightCm !== null) {
       const num = Number(heightCm);
       if (!Number.isFinite(num) || num <= 0 || num > 300) {
-        throw new BadRequestError("heightCm must be a number between 0 and 300");
+        throw new BadRequestError(
+          "heightCm must be a number between 0 and 300",
+        );
       }
       profileUpdates.heightCm = num;
     } else profileUpdates.heightCm = null;
   }
   if (viewedAdvice !== undefined) {
-    if (!Array.isArray(viewedAdvice) || viewedAdvice.some((id) => typeof id !== "string")) {
+    if (
+      !Array.isArray(viewedAdvice) ||
+      viewedAdvice.some((id) => typeof id !== "string")
+    ) {
       throw new BadRequestError("viewedAdvice must be an array of strings");
     }
     profileUpdates.viewedAdvice = viewedAdvice;
   }
   if (relevantAdvice !== undefined) {
-    if (!Array.isArray(relevantAdvice) || relevantAdvice.some((id) => typeof id !== "string")) {
-      throw new BadRequestError("relevantAdvice must be an array of strings");
+    if (
+      !Array.isArray(relevantAdvice) ||
+      relevantAdvice.some((id) => typeof id !== "string")
+    ) {
+      throw new BadRequestError(
+        "relevantAdvice must be an array of strings",
+      );
     }
     profileUpdates.relevantAdvice = relevantAdvice;
   }
@@ -205,14 +238,18 @@ export async function updateMe(req, res) {
     if (weightKg !== null) {
       const num = Number(weightKg);
       if (!Number.isFinite(num) || num <= 0 || num > 500) {
-        throw new BadRequestError("weightKg must be a number between 0 and 500");
+        throw new BadRequestError(
+          "weightKg must be a number between 0 and 500",
+        );
       }
       profileUpdates.weightKg = num;
     } else profileUpdates.weightKg = null;
   }
 
-  // Validate language (lives at user root, not on clientProfile)
-  const SUPPORTED = ["no", "en", "nl", "fr", "de", "it", "sv", "da", "fi", "es", "pl", "pt"];
+  const SUPPORTED = [
+    "no", "en", "nl", "fr", "de", "it",
+    "sv", "da", "fi", "es", "pl", "pt",
+  ];
   let languageUpdate = undefined;
   if (language !== undefined) {
     if (typeof language !== "string" || !SUPPORTED.includes(language)) {
@@ -221,7 +258,10 @@ export async function updateMe(req, res) {
     languageUpdate = language;
   }
 
-  if (Object.keys(profileUpdates).length === 0 && languageUpdate === undefined) {
+  if (
+    Object.keys(profileUpdates).length === 0 &&
+    languageUpdate === undefined
+  ) {
     throw new BadRequestError("No valid profile fields provided");
   }
 
@@ -291,11 +331,139 @@ export async function changePassword(req, res) {
 
   user.passwordHash = await User.hashPassword(newPassword);
 
-  // Rotate refresh token so old sessions can no longer refresh.
   const refreshToken = signRefreshToken(user);
   user.refreshTokenHash = await hashRefreshToken(refreshToken);
   await user.save();
 
   const accessToken = signAccessToken(user);
   res.json({ user: user.toPublic(), accessToken, refreshToken });
+}
+
+// ── Forgot / reset password (new) ─────────────────────────────────────────
+
+const RESET_CODE_TTL_MS  = 15 * 60 * 1000; // 15 minutes
+const RESET_MAX_ATTEMPTS = 5;
+
+/**
+ * Generate a 6-digit numeric code as a zero-padded string.
+ * crypto.randomInt is uniform across the range, unlike Math.random.
+ */
+function generateResetCode() {
+  return String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+}
+
+/**
+ * POST /auth/forgot-password
+ *
+ * Always returns 200 regardless of whether the email exists in the database.
+ * This prevents attackers from enumerating which emails are registered.
+ */
+export async function forgotPassword(req, res) {
+  const email = normalizeEmail(req.body?.email);
+  if (!isValidEmail(email)) {
+    // Even on bad email format, return generic 200 to avoid leaking info
+    return res.json({ ok: true });
+  }
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    // Email isn't registered — silently succeed
+    return res.json({ ok: true });
+  }
+
+  const code = generateResetCode();
+  user.resetCodeHash      = await User.hashPassword(code);
+  user.resetCodeExpiresAt = new Date(Date.now() + RESET_CODE_TTL_MS);
+  user.resetCodeAttempts  = 0;
+  await user.save();
+
+  try {
+    await sendPinResetEmail(user.email, code, user.language || "en");
+  } catch (err) {
+    // Email failed — log it server-side, but still return 200 to client.
+    // We don't want to leak that the email exists OR that mail is broken.
+    console.error("[forgotPassword] sendPinResetEmail failed:", err?.message);
+  }
+
+  res.json({ ok: true });
+}
+
+/**
+ * POST /auth/reset-password
+ *
+ * Body: { email, code, newPassword }
+ * On success, returns { user, accessToken, refreshToken } so the client
+ * can log the user in immediately without a separate /login call.
+ */
+export async function resetPassword(req, res) {
+  const email = normalizeEmail(req.body?.email);
+  const { code, newPassword } = req.body || {};
+
+  if (!isValidEmail(email)) {
+    throw new BadRequestError("Invalid email");
+  }
+  if (typeof code !== "string" || !/^\d{6}$/.test(code)) {
+    throw new BadRequestError("Code must be 6 digits");
+  }
+  if (typeof newPassword !== "string" || newPassword.length < 4) {
+    throw new BadRequestError("New password must be at least 4 characters");
+  }
+
+  const user = await User.findOne({ email });
+
+  // Generic error for all "couldn't reset" cases — same response whether
+  // the user exists, the code is wrong, or it's expired. Prevents leaking
+  // which step failed.
+  const genericFail = () =>
+    new UnauthorizedError("Invalid or expired reset code");
+
+  if (!user || !user.resetCodeHash || !user.resetCodeExpiresAt) {
+    throw genericFail();
+  }
+
+  if (user.resetCodeExpiresAt.getTime() < Date.now()) {
+    // Expired — clear so a fresh code is required
+    user.resetCodeHash      = null;
+    user.resetCodeExpiresAt = null;
+    user.resetCodeAttempts  = 0;
+    await user.save();
+    throw genericFail();
+  }
+
+  if (user.resetCodeAttempts >= RESET_MAX_ATTEMPTS) {
+    // Too many wrong tries — clear and force a new code
+    user.resetCodeHash      = null;
+    user.resetCodeExpiresAt = null;
+    user.resetCodeAttempts  = 0;
+    await user.save();
+    throw genericFail();
+  }
+
+  const ok = await (await import("bcryptjs")).default.compare(
+    code,
+    user.resetCodeHash,
+  );
+  if (!ok) {
+    user.resetCodeAttempts += 1;
+    await user.save();
+    throw genericFail();
+  }
+
+  // Code is valid — update password, clear reset state, rotate refresh token
+  user.passwordHash       = await User.hashPassword(newPassword);
+  user.resetCodeHash      = null;
+  user.resetCodeExpiresAt = null;
+  user.resetCodeAttempts  = 0;
+
+  const refreshToken = signRefreshToken(user);
+  user.refreshTokenHash = await hashRefreshToken(refreshToken);
+  user.lastSeenAt = new Date();
+  await user.save();
+
+  const accessToken = signAccessToken(user);
+  res.json({
+    user: user.toPublic(),
+    accessToken,
+    refreshToken,
+  });
 }

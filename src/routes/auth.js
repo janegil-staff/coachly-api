@@ -1,3 +1,5 @@
+// src/routes/auth.js
+
 import express from "express";
 import { asyncHandler } from "../middleware/asyncHandler.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -9,6 +11,11 @@ router.post("/check-email", asyncHandler(ctrl.checkEmail));
 router.post("/signup", asyncHandler(ctrl.signup));
 router.post("/login", asyncHandler(ctrl.login));
 router.post("/refresh", asyncHandler(ctrl.refresh));
+
+// ── Password reset (no auth required — user is locked out by definition) ──
+router.post("/forgot-password", asyncHandler(ctrl.forgotPassword));
+router.post("/reset-password", asyncHandler(ctrl.resetPassword));
+
 router.post("/logout", requireAuth, asyncHandler(ctrl.logout));
 router.get("/me", requireAuth, asyncHandler(ctrl.getMe));
 router.patch("/me", requireAuth, asyncHandler(ctrl.updateMe));

@@ -1,3 +1,10 @@
+// src/models/User.js
+//
+// Adds three fields to support PIN/password reset:
+//   - resetCodeHash       bcrypt hash of the 6-digit code (so a DB leak doesn't expose live codes)
+//   - resetCodeExpiresAt  hard 15-minute expiry
+//   - resetCodeAttempts   counter — locks out after 5 wrong tries, user requests a fresh code
+
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
@@ -8,7 +15,6 @@ const CoachProfileSchema = new Schema(
     specialties: { type: [String], default: [] },
     bio: { type: String, default: "" },
     certifications: { type: [String], default: [] },
-    // Free tier client cap; unlimited for pro
     maxClients: { type: Number, default: 5 },
     isPro: { type: Boolean, default: false },
     proUntil: { type: Date, default: null },
@@ -27,9 +33,7 @@ const ClientProfileSchema = new Schema(
     },
     heightCm: { type: Number, min: 0, max: 300, default: null },
     weightKg: { type: Number, min: 0, max: 500, default: null },
-    // "build_muscle" | "lose_fat" | "general_fitness" | "endurance" | "strength"
     goalType: { type: String, default: "general_fitness" },
-    // "sedentary" | "light" | "moderate" | "active" | "very_active"
     activityLevel: { type: String, default: "moderate" },
     viewedAdvice: { type: [String], default: [] },
     relevantAdvice: { type: [String], default: [] },
@@ -63,8 +67,12 @@ const UserSchema = new Schema(
     coachProfile: { type: CoachProfileSchema, default: () => ({}) },
     clientProfile: { type: ClientProfileSchema, default: () => ({}) },
 
-    // Refresh token rotation — we store a hash so stolen DBs aren't replayable
     refreshTokenHash: { type: String, default: null },
+
+    // ── Password reset (added) ──────────────────────────────────────────────
+    resetCodeHash:      { type: String, default: null },
+    resetCodeExpiresAt: { type: Date,   default: null },
+    resetCodeAttempts:  { type: Number, default: 0 },
 
     lastSeenAt: { type: Date, default: null },
   },
@@ -72,6 +80,7 @@ const UserSchema = new Schema(
 );
 
 // ── Statics / methods ──────────────────────────────────────────────────────
+
 UserSchema.statics.hashPassword = async function (plain) {
   return bcrypt.hash(plain, 10);
 };
@@ -85,7 +94,9 @@ UserSchema.methods.toPublic = function () {
   const obj = this.toObject({ versionKey: false });
   delete obj.passwordHash;
   delete obj.refreshTokenHash;
-  // Hide the opposite-role profile to keep responses clean
+  delete obj.resetCodeHash;
+  delete obj.resetCodeExpiresAt;
+  delete obj.resetCodeAttempts;
   if (obj.role === "coach") delete obj.clientProfile;
   if (obj.role === "client") delete obj.coachProfile;
   return obj;
