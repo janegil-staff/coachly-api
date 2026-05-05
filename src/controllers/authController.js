@@ -6,7 +6,6 @@ import Message from "../models/Message.js";
 import DailyScore from "../models/DailyScore.js";
 import UserExerciseSelection from "../models/UserExerciseSelection.js";
 import Workout from "../models/Workout.js";
-import { BadRequestError, UnauthorizedError } from "../utils/errors.js";
 
 import User from "../models/User.js";
 import {
