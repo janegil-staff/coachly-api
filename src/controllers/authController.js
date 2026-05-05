@@ -1,3 +1,5 @@
+import bcrypt from "bcryptjs";
+import User from "../models/User.js";
 import LogEntry from "../models/LogEntry.js";
 import Questionnaire from "../models/Questionnaire.js";
 import ShareCode from "../models/ShareCode.js";
@@ -7,7 +9,6 @@ import DailyScore from "../models/DailyScore.js";
 import UserExerciseSelection from "../models/UserExerciseSelection.js";
 import Workout from "../models/Workout.js";
 
-import User from "../models/User.js";
 import {
   signAccessToken,
   signRefreshToken,
@@ -163,24 +164,31 @@ export async function getMe(req, res) {
   res.json({ user: req.user.toPublic() });
 }
 
-
-
 export async function deleteMe(req, res) {
-  const { password } = req.body || {};
+  console.log("[deleteMe] body:", req.body);
+  console.log("[deleteMe] headers:", req.headers["content-type"]);
 
-  if (!password) {
-    throw new BadRequestError("Password required to delete account");
+  const { pin, password } = req.body || {};
+  const credential = pin || password;
+
+  if (!credential) {
+    throw new BadRequestError("PIN required to delete account");
   }
 
-  const valid = await req.user.compare(password);
+  const userWithHash = await User.findById(req.user._id).select(
+    "+passwordHash",
+  );
+  if (!userWithHash) {
+    throw new UnauthorizedError("User not found");
+  }
+
+  const valid = await bcrypt.compare(credential, userWithHash.passwordHash);
   if (!valid) {
-    throw new UnauthorizedError("Invalid password");
+    throw new UnauthorizedError("Invalid PIN");
   }
 
   const userId = req.user._id;
 
-  // Find all relationships this user is part of (as coach or client),
-  // then delete messages tied to those relationships.
   const relationships = await CoachingRelationship.find({
     $or: [{ coachId: userId }, { clientId: userId }],
   }).select("_id");
@@ -264,9 +272,7 @@ export async function updateMe(req, res) {
       !Array.isArray(relevantAdvice) ||
       relevantAdvice.some((id) => typeof id !== "string")
     ) {
-      throw new BadRequestError(
-        "relevantAdvice must be an array of strings",
-      );
+      throw new BadRequestError("relevantAdvice must be an array of strings");
     }
     profileUpdates.relevantAdvice = relevantAdvice;
   }
@@ -283,8 +289,18 @@ export async function updateMe(req, res) {
   }
 
   const SUPPORTED = [
-    "no", "en", "nl", "fr", "de", "it",
-    "sv", "da", "fi", "es", "pl", "pt",
+    "no",
+    "en",
+    "nl",
+    "fr",
+    "de",
+    "it",
+    "sv",
+    "da",
+    "fi",
+    "es",
+    "pl",
+    "pt",
   ];
   let languageUpdate = undefined;
   if (language !== undefined) {
@@ -377,7 +393,7 @@ export async function changePassword(req, res) {
 
 // ── Forgot / reset password ───────────────────────────────────────────────
 
-const RESET_CODE_TTL_MS  = 15 * 60 * 1000; // 15 minutes
+const RESET_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const RESET_MAX_ATTEMPTS = 5;
 
 /**
@@ -408,9 +424,9 @@ export async function forgotPassword(req, res) {
   }
 
   const code = generateResetCode();
-  user.resetCodeHash      = await User.hashPassword(code);
+  user.resetCodeHash = await User.hashPassword(code);
   user.resetCodeExpiresAt = new Date(Date.now() + RESET_CODE_TTL_MS);
-  user.resetCodeAttempts  = 0;
+  user.resetCodeAttempts = 0;
   await user.save();
 
   try {
@@ -460,18 +476,18 @@ export async function resetPassword(req, res) {
 
   if (user.resetCodeExpiresAt.getTime() < Date.now()) {
     // Expired — clear so a fresh code is required.
-    user.resetCodeHash      = null;
+    user.resetCodeHash = null;
     user.resetCodeExpiresAt = null;
-    user.resetCodeAttempts  = 0;
+    user.resetCodeAttempts = 0;
     await user.save();
     throw genericFail();
   }
 
   if (user.resetCodeAttempts >= RESET_MAX_ATTEMPTS) {
     // Too many wrong tries — clear and force a new code.
-    user.resetCodeHash      = null;
+    user.resetCodeHash = null;
     user.resetCodeExpiresAt = null;
-    user.resetCodeAttempts  = 0;
+    user.resetCodeAttempts = 0;
     await user.save();
     throw genericFail();
   }
@@ -484,10 +500,10 @@ export async function resetPassword(req, res) {
   }
 
   // Code is valid — update password, clear reset state, rotate refresh token.
-  user.passwordHash       = await User.hashPassword(newPassword);
-  user.resetCodeHash      = null;
+  user.passwordHash = await User.hashPassword(newPassword);
+  user.resetCodeHash = null;
   user.resetCodeExpiresAt = null;
-  user.resetCodeAttempts  = 0;
+  user.resetCodeAttempts = 0;
 
   const refreshToken = signRefreshToken(user);
   user.refreshTokenHash = await hashRefreshToken(refreshToken);
