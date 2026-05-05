@@ -1,15 +1,12 @@
-// src/controllers/authController.js
-//
-// Production version. The verbose [forgotPassword] STEP N logs from the
-// diagnostic version are removed — kept only a single error log on email
-// send failure so we still get visibility if Resend ever rejects a send.
-//
-// Two new endpoints over the original file:
-//   - forgotPassword  (POST /auth/forgot-password)  generates code, emails it
-//   - resetPassword   (POST /auth/reset-password)   verifies code, updates password
-
-import crypto from "crypto";
-import bcrypt from "bcryptjs";
+import LogEntry from "../models/LogEntry.js";
+import Questionnaire from "../models/Questionnaire.js";
+import ShareCode from "../models/ShareCode.js";
+import CoachingRelationship from "../models/CoachingRelationship.js";
+import Message from "../models/Message.js";
+import DailyScore from "../models/DailyScore.js";
+import UserExerciseSelection from "../models/UserExerciseSelection.js";
+import Workout from "../models/Workout.js";
+import { BadRequestError, UnauthorizedError } from "../utils/errors.js";
 
 import User from "../models/User.js";
 import {
@@ -167,8 +164,46 @@ export async function getMe(req, res) {
   res.json({ user: req.user.toPublic() });
 }
 
+
+
 export async function deleteMe(req, res) {
+  const { password } = req.body || {};
+
+  if (!password) {
+    throw new BadRequestError("Password required to delete account");
+  }
+
+  const valid = await req.user.compare(password);
+  if (!valid) {
+    throw new UnauthorizedError("Invalid password");
+  }
+
+  const userId = req.user._id;
+
+  // Find all relationships this user is part of (as coach or client),
+  // then delete messages tied to those relationships.
+  const relationships = await CoachingRelationship.find({
+    $or: [{ coachId: userId }, { clientId: userId }],
+  }).select("_id");
+  const relationshipIds = relationships.map((r) => r._id);
+
+  await Promise.all([
+    LogEntry.deleteMany({ clientId: userId }),
+    Questionnaire.deleteMany({ userId }),
+    ShareCode.deleteMany({ userId }),
+    DailyScore.deleteMany({ clientId: userId }),
+    UserExerciseSelection.deleteMany({ patient: userId }),
+    Workout.deleteMany({
+      $or: [{ coachId: userId }, { clientId: userId }],
+    }),
+    Message.deleteMany({ relationshipId: { $in: relationshipIds } }),
+    CoachingRelationship.deleteMany({
+      $or: [{ coachId: userId }, { clientId: userId }],
+    }),
+  ]);
+
   await req.user.deleteOne();
+
   res.json({ ok: true });
 }
 
